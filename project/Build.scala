@@ -18,10 +18,14 @@ object ExperimentalBuild extends Build {
 
   lazy val compileSettings: Seq[Setting[_]] =
     Seq(
-      renameTask in Compile <<= generateRenamedResourcesTask,
+//      resourceGenerators in Compile <+= (propsWriteTask in Compile).task,
+        renameTask in Compile <<= generateRenamedResourcesTask,
       propsTask in Compile <<= generatePropertiesTask,
-      propsWriteTask in Compile <<= generatePropertiesFileTask,
-      packageTask in Compile <<= generatePackageTask
+      propsWriteTask in Compile <<= generatePropertiesFileTask      ,
+//      packageTask in Compile <<= generatePackageTask     ,
+      packageTask in Compile <<= (packageBin in Compile).dependsOn(propsWriteTask in Compile),
+      //      packageBin in Compile <<= (packageBin in Compile).dependsOn(propsWriteTask in Compile)
+        includeFilter in Compile in managedResources := "*"
     )
 
   // TASK DEFINITIONS
@@ -30,9 +34,9 @@ object ExperimentalBuild extends Build {
 
   val propsTask = TaskKey[(Properties, Seq[File])]("props", "Generates a Properties instance and renamed unmanaged resources.")
 
-  val propsWriteTask = TaskKey[Unit]("propw", "Writes a Properties instance to file.")
+  val propsWriteTask = TaskKey[Seq[File]]("propw", "Writes a Properties instance to file.")
 
-  val packageTask = TaskKey[Unit]("pack", "Builds a package including properties.")
+  val packageTask = TaskKey[File]("pack", "Builds a package including properties.")
 
   // TASK IMPLEMENTATIONS
 
@@ -84,23 +88,22 @@ object ExperimentalBuild extends Build {
 
   val generatePropertiesFileTask =
     (propsTask in Compile, resourceManaged in Compile, streams) map {
-      (propsAndMappings, targetDir, streams) =>
+        (propsAndMappings, targetDir, streams) =>
         val log = streams.log
         val props = propsAndMappings._1
         val comment = "testing123"
         val file = targetDir / "test.properties"
         IO.write(props, comment, file)
+        Seq(file)
     }
 
   val generatePackageTask =
-    (propsTask in Compile, packageBin in Compile, streams) map {
-      (propsAndMappings, target, streams) =>
+    (propsWriteTask in Compile, packageBin in Compile, streams) map {
+      (propsFile, target, streams) =>
         val log = streams.log
-        val props = propsAndMappings._1
-        val comment = "testing123"
     }
 
-  // HELPERS
+  // HASHING
 
   private val digester = java.security.MessageDigest.getInstance("SHA-1")
 
