@@ -19,16 +19,36 @@ object ExperimentalBuild extends Build {
   lazy val compileSettings: Seq[Setting[_]] =
     Seq(
       renameTask in Compile <<= generateRenamedResourcesTask,
-      propsTask in Compile <<= generatePropertiesTask
+      propsTask in Compile <<= generatePropertiesTask,
+      propsWriteTask in Compile <<= generatePropertiesFileTask,
+      packageTask in Compile <<= generatePackageTask
     )
 
   // TASK DEFINITIONS
 
-  val propsTask = TaskKey[(Properties, Seq[File])]("props", "Generates a property file and renamed unmanaged resources.")
-
   val renameTask = TaskKey[Seq[(File, File)]]("rename", "Generates renamed unmanaged resources.")
 
+  val propsTask = TaskKey[(Properties, Seq[File])]("props", "Generates a Properties instance and renamed unmanaged resources.")
+
+  val propsWriteTask = TaskKey[Unit]("propw", "Writes a Properties instance to file.")
+
+  val packageTask = TaskKey[Unit]("pack", "Builds a package including properties.")
+
   // TASK IMPLEMENTATIONS
+
+  val generateRenamedResourcesTask =
+    (resourceDirectory in Compile, resourceManaged in Compile, resources in Compile, cacheDirectory, streams) map {
+      (sourceDir, targetDir, resrcs, cache, streams) =>
+        val log = streams.log
+        val mappings = (resrcs --- sourceDir) x (mapToHashedFilenames(sourceDir, targetDir))
+        log.info("Resource mappings: " + mappings.mkString("\n\t", "\n\t", ""))
+
+        // sync file system
+        val cacheFile = cache / "test"
+        Sync(cacheFile)(mappings)
+
+        mappings
+    }
 
   val generatePropertiesTask =
     (renameTask in Compile, resourceDirectory in Compile, resourceManaged in Compile, streams) map {
@@ -50,6 +70,8 @@ object ExperimentalBuild extends Build {
             log.info("targetDir: " + targetDir)
             val relativeSource = getRelativePath(source, sourceDir)
             val relativeTarget = getRelativePath(target, targetDir)
+            //            val relativeTarget = (target --- targetDir).toString
+            log.info("rel target: " + relativeTarget)
             properties.put(relativeSource, relativeTarget)
           }
         }
@@ -60,13 +82,22 @@ object ExperimentalBuild extends Build {
 
     }
 
-  val generateRenamedResourcesTask =
-    (resourceDirectory in Compile, resourceManaged in Compile, resources in Compile, streams) map {
-      (sourceDir, targetDir, resrcs, streams) =>
+  val generatePropertiesFileTask =
+    (propsTask in Compile, resourceManaged in Compile, streams) map {
+      (propsAndMappings, targetDir, streams) =>
         val log = streams.log
-        val mappings = (resrcs --- sourceDir) x (mapToHashedFilenames(sourceDir, targetDir))
-        log.info("Resource mappings: " + mappings.mkString("\n\t", "\n\t", ""))
-        mappings
+        val props = propsAndMappings._1
+        val comment = "testing123"
+        val file = targetDir / "test.properties"
+        IO.write(props, comment, file)
+    }
+
+  val generatePackageTask =
+    (propsTask in Compile, packageBin in Compile, streams) map {
+      (propsAndMappings, target, streams) =>
+        val log = streams.log
+        val props = propsAndMappings._1
+        val comment = "testing123"
     }
 
   // HELPERS
