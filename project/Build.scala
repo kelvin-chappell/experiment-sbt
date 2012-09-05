@@ -1,6 +1,7 @@
 import java.util.Properties
 import sbt._
-import Keys._
+import sbt.Keys._
+import scala.Some
 
 object ExperimentalBuild extends Build {
 
@@ -18,14 +19,32 @@ object ExperimentalBuild extends Build {
 
   lazy val compileSettings: Seq[Setting[_]] =
     Seq(
-//      resourceGenerators in Compile <+= (propsWriteTask in Compile).task,
-        renameTask in Compile <<= generateRenamedResourcesTask,
+      renameTask in Compile <<= generateRenamedResourcesTask,
       propsTask in Compile <<= generatePropertiesTask,
-      propsWriteTask in Compile <<= generatePropertiesFileTask      ,
-//      packageTask in Compile <<= generatePackageTask     ,
-      packageTask in Compile <<= (packageBin in Compile).dependsOn(propsWriteTask in Compile),
-      //      packageBin in Compile <<= (packageBin in Compile).dependsOn(propsWriteTask in Compile)
-        includeFilter in Compile in managedResources := "*"
+      propsWriteTask in Compile <<= generatePropertiesFileTask,
+
+      packageBin in Compile <<= (packageBin in Compile).dependsOn(propsWriteTask in Compile),
+
+      mappings in(Compile, packageBin) <++=
+        (resourceManaged in Compile, managedResources in Compile) map {
+          (base, srcs) => {
+            println("base: " + base)
+            println("srcs: " + srcs)
+            val x = srcs x (relativeTo(base) | flat)
+            println("X: " + x)
+            val y = Seq((base / "test.properties", "testingit.txt"))
+            println("Y: " + y)
+            y
+          }
+        },
+
+      resourceGenerators in Compile <+= resourceManaged in Compile map {
+        dir =>
+          val file = dir / "demo" / "Test.scala"
+          IO.write(file, """object Test extends App { println("Hi") }""")
+          Seq(file)
+      }
+
     )
 
   // TASK DEFINITIONS
@@ -88,7 +107,7 @@ object ExperimentalBuild extends Build {
 
   val generatePropertiesFileTask =
     (propsTask in Compile, resourceManaged in Compile, streams) map {
-        (propsAndMappings, targetDir, streams) =>
+      (propsAndMappings, targetDir, streams) =>
         val log = streams.log
         val props = propsAndMappings._1
         val comment = "testing123"
@@ -100,7 +119,7 @@ object ExperimentalBuild extends Build {
   val generatePackageTask =
     (propsWriteTask in Compile, packageBin in Compile, streams) map {
       (propsFile, target, streams) =>
-        val log = streams.log
+      val log = streams.log
     }
 
   // HASHING
